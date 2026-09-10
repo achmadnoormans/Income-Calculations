@@ -312,6 +312,7 @@ class SalaryBotApp:
     # Command Handlers
     # -------------------------------------------------------------
     def handle_start(self, chat_id: int, user_first_name: str = "Rekan SA"):
+        USER_SESSIONS.pop(chat_id, None)  # Auto reset session
         text = (
             f"Halo! Selamat Datang 👋\n\n"
             f"Selamat datang di *Bot Kalkulasi Gaji & Insentif XL SATU* 🚀\n\n"
@@ -490,11 +491,13 @@ class SalaryBotApp:
         }
         self.bot.send_message(chat_id, report, reply_markup=keyboard)
 
-    def handle_simulasi_start(self, chat_id: int, message_id: Optional[int] = None):
+    def handle_simulasi_start(self, chat_id: int, message_id: Optional[int] = None, reset_units: bool = True):
         """Show interactive simulation directly with position switch buttons."""
+        pos = "PRO"
         session = USER_SESSIONS.get(chat_id)
-        pos = session.get("data", {}).get("position", "PRO") if session else "PRO"
-        self.handle_simulasi_select_position(chat_id, pos, message_id=message_id)
+        if session and not reset_units:
+            pos = session.get("data", {}).get("position", "PRO")
+        self.handle_simulasi_select_position(chat_id, pos, message_id=message_id, reset_units=reset_units)
 
     def parse_product_quantities(self, text: str, current_quantities: Optional[List[int]] = None) -> Optional[List[int]]:
         """
@@ -735,6 +738,7 @@ class SalaryBotApp:
                     }
                 ],
                 [
+                    {"text": "🔄 Reset Unit", "callback_data": "sim_reset"},
                     {"text": "🏠 Menu Utama", "callback_data": "menu_main"}
                 ]
             ]
@@ -797,12 +801,12 @@ class SalaryBotApp:
         ])
         self.bot.send_message(chat_id, "\n".join(lines))
 
-    def handle_simulasi_select_position(self, chat_id: int, position: str, message_id: Optional[int] = None):
+    def handle_simulasi_select_position(self, chat_id: int, position: str, message_id: Optional[int] = None, reset_units: bool = False):
         session = USER_SESSIONS.get(chat_id)
-        if session and session.get("state") == "SIMULATION_BUILDER" and "quantities" in session.get("data", {}):
+        if not reset_units and session and session.get("state") == "SIMULATION_BUILDER" and "quantities" in session.get("data", {}):
             quantities = session["data"]["quantities"]
         else:
-            quantities = [0] * 8
+            quantities = [0] * len(PRODUCT_CATALOG)
         step = 1
         target_mid = message_id or (session.get("data", {}).get("message_id") if session else None)
         USER_SESSIONS[chat_id] = {
@@ -987,7 +991,7 @@ class SalaryBotApp:
         if "@" in cmd:
             cmd = cmd.split("@")[0]
 
-        if cmd in ["/start"]:
+        if cmd in ["/start", "/menu"]:
             self.handle_start(chat_id, first_name)
         elif cmd in ["/help", "/bantuan"]:
             self.handle_help(chat_id)
@@ -1065,6 +1069,7 @@ class SalaryBotApp:
 
 
         if data == "menu_main":
+            USER_SESSIONS.pop(chat_id, None)  # Auto reset state & session saat klik menu
             self.bot.edit_message_text(
                 chat_id,
                 message_id,
@@ -1074,7 +1079,13 @@ class SalaryBotApp:
         elif data == "menu_cek":
             self.handle_cek_saya_auto(chat_id, message_id=message_id)
         elif data == "menu_simulasi":
-            self.handle_simulasi_start(chat_id, message_id=message_id)
+            USER_SESSIONS.pop(chat_id, None)  # Auto reset unit ke 0 saat buka simulasi baru
+            self.handle_simulasi_start(chat_id, message_id=message_id, reset_units=True)
+        elif data == "sim_reset":
+            # Reset unit ke 0 langsung di tampilan simulasi
+            session = USER_SESSIONS.get(chat_id)
+            pos = session.get("data", {}).get("position", "PRO") if session else "PRO"
+            self.handle_simulasi_select_position(chat_id, pos, message_id=message_id, reset_units=True)
         elif data == "menu_agen":
             self.handle_agen(chat_id, message_id=message_id)
         elif data == "menu_info":
@@ -1086,7 +1097,7 @@ class SalaryBotApp:
             self.handle_cek(chat_id, agent_name)
         elif data.startswith("sim_pos_"):
             pos = data.replace("sim_pos_", "")
-            self.handle_simulasi_select_position(chat_id, pos, message_id=message_id)
+            self.handle_simulasi_select_position(chat_id, pos, message_id=message_id, reset_units=False)
         elif data.startswith("sim_quick_"):
             # Format: sim_quick_PRO_12
             parts = data.split("_")
