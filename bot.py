@@ -90,6 +90,30 @@ def start_health_server():
         logger.warning("Gagal memulai health check server: %s", e)
 
 
+def start_self_ping():
+    """Otomatis ping URL publik Render setiap 10 menit agar instance Free Tier tidak sleep."""
+    url = os.getenv("RENDER_EXTERNAL_URL")
+    if not url:
+        return
+
+    def ping_loop():
+        time.sleep(45)  # Tunggu server online
+        logger.info("Auto keep-alive aktif untuk: %s", url)
+        while True:
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": "Render-KeepAlive/1.0"})
+                with urllib.request.urlopen(req, timeout=20) as resp:
+                    if resp.status == 200:
+                        logger.info("Keep-alive ping sukses: 200 OK")
+            except Exception as e:
+                logger.warning("Keep-alive ping notice: %s", e)
+            time.sleep(10 * 60)  # Ping tiap 10 menit (Render sleep setelah 15 menit idle)
+
+    thread = threading.Thread(target=ping_loop, daemon=True)
+    thread.start()
+
+
+
 from config import TELEGRAM_BOT_TOKEN, SPREADSHEET_URL, PRODUCT_CATALOG, BASIC_SALARIES, INSTALLATION_TIERS
 from calculator import SalaryCalculator, format_rupiah
 from sheet_reader import GoogleSheetReader
@@ -1292,6 +1316,7 @@ class SalaryBotApp:
 def main():
     acquire_lock()  # Cegah instance ganda
     start_health_server()  # Render Web Service health check
+    start_self_ping()      # Render Free Tier auto keep-alive
     bot_client = TelegramBotClient(TELEGRAM_BOT_TOKEN)
     app = SalaryBotApp(bot_client)
 
