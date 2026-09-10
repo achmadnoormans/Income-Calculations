@@ -1,0 +1,26 @@
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# Process lock & DB
+.bot.lock
+users.db
+
+# Python
+__pycache__/
+*.py[cod]
+*.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+
+# Local test scratch
+scratch/
